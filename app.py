@@ -1,65 +1,51 @@
-import streamlit as st
-import pandas as pd
-import joblib
 
-# --------------------------------------------------
-# Page configuration
-# --------------------------------------------------
+from pathlib import Path
+import joblib
+import pandas as pd
+import streamlit as st
+
+BASE_DIR = Path(__file__).resolve().parent
+MODEL_PATH = BASE_DIR / "student_performance_model.joblib"
+
 st.set_page_config(
     page_title="Student Performance Prediction",
     page_icon="🎓",
     layout="wide"
 )
 
+
+@st.cache_resource
+def load_bundle():
+    if not MODEL_PATH.exists():
+        return None
+    return joblib.load(MODEL_PATH)
+
+
+bundle = load_bundle()
+
 st.title("🎓 Student Performance Prediction")
 st.write(
-    "Enter the student's details below to predict "
-    "their final grade."
+    "Predict a student's estimated final grade (G3, out of 20) "
+    "using demographic, family, social, and educational characteristics."
 )
 
-# --------------------------------------------------
-# Load the trained model
-# --------------------------------------------------
-@st.cache_resource
-def load_model():
-    return joblib.load("student_performance_model.joblib")
-
-try:
-    bundle = load_model()
-
-    # Support either a saved dictionary or a direct model
-    if isinstance(bundle, dict):
-        model = bundle.get("model")
-        feature_columns = bundle.get("feature_columns")
-
-        if model is None or feature_columns is None:
-            st.error(
-                "The saved model bundle must contain "
-                "'model' and 'feature_columns'."
-            )
-            st.stop()
-    else:
-        st.error(
-            "The saved file must contain a dictionary "
-            "with 'model' and 'feature_columns'."
-        )
-        st.stop()
-
-except FileNotFoundError:
-    st.error(
-        "Model file not found. Keep "
-        "'student_performance_model.joblib' "
-        "in the same folder as app.py."
+if bundle is None:
+    st.error("The trained model file was not found.")
+    st.code(
+        "python train_model.py\npython -m streamlit run app.py",
+        language="bash"
     )
     st.stop()
-except Exception as e:
-    st.error(f"Unable to load the model: {e}")
-    st.stop()
 
-# --------------------------------------------------
-# User-friendly field labels
-# Original column names remain unchanged
-# --------------------------------------------------
+st.caption(f"Model: {bundle['model_name']}")
+
+# Original feature names required by the trained model
+feature_columns = bundle["feature_columns"]
+categorical_cols = bundle["categorical_cols"]
+numerical_cols = bundle["numerical_cols"]
+
+# Friendly labels shown to users.
+# These labels do not change the model's original feature names.
 custom_labels = {
     "school": "School",
     "sex": "Gender",
@@ -90,37 +76,39 @@ custom_labels = {
     "Dalc": "Alcohol Consumption on Weekdays",
     "Walc": "Alcohol Consumption on Weekends",
     "health": "Current Health Status",
-    "absences": "Number of School Absences"
+    "absences": "Number of School Absences",
 }
 
-# Explanations for coded values
+# Explanations for fields with coded numeric values.
 field_help = {
-    "Medu": "0 = None, 1 = Primary, 2 = Grades 5–9, "
-            "3 = Secondary, 4 = Higher education",
-    "Fedu": "0 = None, 1 = Primary, 2 = Grades 5–9, "
-            "3 = Secondary, 4 = Higher education",
-    "traveltime": "1 = Under 15 min, 2 = 15–30 min, "
-                  "3 = 30–60 min, 4 = Over 60 min",
-    "studytime": "1 = Under 2 hours, 2 = 2–5 hours, "
-                 "3 = 5–10 hours, 4 = Over 10 hours per week",
-    "failures": "Number of previous class failures: 0, 1, 2, or 3 "
-                "(3 also represents three or more)",
-    "famrel": "1 = Very bad, 2 = Bad, 3 = Average, "
-              "4 = Good, 5 = Excellent",
-    "freetime": "1 = Very low, 2 = Low, 3 = Average, "
-                "4 = High, 5 = Very high",
-    "goout": "1 = Very low, 2 = Low, 3 = Average, "
-             "4 = High, 5 = Very high",
-    "Dalc": "Weekday alcohol consumption scale: 1 = Very low "
-            "and 5 = Very high",
-    "Walc": "Weekend alcohol consumption scale: 1 = Very low "
-            "and 5 = Very high",
-    "health": "1 = Very bad, 2 = Bad, 3 = Average, "
-              "4 = Good, 5 = Very good",
-    "absences": "Number of school absences"
+    "Medu": "0 = None, 1 = Primary, 2 = 5th–9th grade, "
+            "3 = Secondary, 4 = Higher education.",
+    "Fedu": "0 = None, 1 = Primary, 2 = 5th–9th grade, "
+            "3 = Secondary, 4 = Higher education.",
+    "traveltime": "1 = Less than 15 min, 2 = 15–30 min, "
+                  "3 = 30–60 min, 4 = More than 60 min.",
+    "studytime": "1 = Less than 2 hours, 2 = 2–5 hours, "
+                 "3 = 5–10 hours, 4 = More than 10 hours per week.",
+    "famrel": "1 = Very bad, 5 = Excellent.",
+    "freetime": "1 = Very low, 5 = Very high.",
+    "goout": "1 = Very low frequency, 5 = Very high frequency.",
+    "Dalc": "1 = Very low, 2 = Low, 3 = Moderate, "
+            "4 = High, 5 = Very high. Scale starts at 1, not 0.",
+    "Walc": "1 = Very low, 2 = Low, 3 = Moderate, "
+            "4 = High, 5 = Very high. Scale starts at 1, not 0.",
+    "health": "1 = Very poor, 5 = Very good.",
+    "failures": "Number of previous class failures.",
+    "absences": "Number of school absences recorded.",
+    "school": "GP = Gabriel Pereira; MS = Mousinho da Silveira.",
+    "address": "U = Urban; R = Rural.",
+    "famsize": "LE3 = 3 or fewer family members; "
+               "GT3 = more than 3 family members.",
+    "Pstatus": "T = Parents live together; "
+               "A = Parents live apart.",
 }
 
-# Display labels for categorical values
+# Display labels for categorical values.
+# The original dataset values are passed to the model.
 display_labels = {
     "school": {
         "GP": "GP — Gabriel Pereira",
@@ -177,169 +165,161 @@ display_labels = {
     }
 }
 
-# --------------------------------------------------
-# Input form
-# --------------------------------------------------
-input_data = {}
-
-# Columns are taken directly from the trained model bundle
-with st.form("student_prediction_form"):
+with st.form("student_details"):
     st.subheader("Enter Student Details")
+    st.caption(
+        "Complete the fields below. The model will use all its original "
+        "input features to generate a prediction."
+    )
 
-    columns = st.columns(2)
+    input_data = {}
+    left, right = st.columns(2)
 
-    for index, feature in enumerate(feature_columns):
+    # Keep ALL original model features in the form.
+    for i, feature in enumerate(feature_columns):
+        area = left if i % 2 == 0 else right
         label = custom_labels.get(
             feature,
             feature.replace("_", " ").title()
         )
-
         help_text = field_help.get(feature)
-        options_map = display_labels.get(feature)
 
-        with columns[index % 2]:
-            # Categorical features
-            if options_map is not None:
-                options = list(options_map.keys())
+        with area:
+            if feature in categorical_cols:
+                options = bundle["categorical_options"].get(feature, [])
+                default = bundle["categorical_defaults"].get(feature)
 
-                # Use dataset values as submitted model values
+                if not options:
+                    st.warning(
+                        f"No known values available for {label}."
+                    )
+                    continue
+
+                default_index = (
+                    options.index(default)
+                    if default in options
+                    else 0
+                )
+
+                # Show friendly labels but submit original values.
+                options_map = display_labels.get(feature, {})
+
                 input_data[feature] = st.selectbox(
                     label,
                     options=options,
+                    index=default_index,
                     format_func=lambda value, m=options_map: m.get(
                         value, str(value)
                     ),
                     help=help_text,
-                    key=f"input_{feature}"
+                    key=f"cat_{feature}"
                 )
 
-            # Numeric features
-            else:
+            elif feature in numerical_cols:
+                info = bundle["numerical_defaults"][feature]
+                minimum = info["min"]
+                maximum = info["max"]
+                default = min(
+                    max(info["median"], minimum),
+                    maximum
+                )
+
+                # Alcohol scales use whole numbers from 1 to 5.
                 if feature in ["Dalc", "Walc"]:
+                    alcohol_labels = {
+                        1: "1 — Very Low",
+                        2: "2 — Low",
+                        3: "3 — Moderate",
+                        4: "4 — High",
+                        5: "5 — Very High"
+                    }
+
                     input_data[feature] = st.selectbox(
                         label,
                         options=[1, 2, 3, 4, 5],
-                        format_func=lambda value: {
-                            1: "1 — Very Low",
-                            2: "2 — Low",
-                            3: "3 — Moderate",
-                            4: "4 — High",
-                            5: "5 — Very High"
-                        }[value],
+                        index=min(
+                            max(int(round(default)) - 1, 0), 4
+                        ),
+                        format_func=lambda value: alcohol_labels[value],
                         help=help_text,
-                        key=f"input_{feature}"
-                    )
-
-                elif feature in ["Medu", "Fedu"]:
-                    input_data[feature] = st.selectbox(
-                        label,
-                        options=[0, 1, 2, 3, 4],
-                        format_func=lambda value: {
-                            0: "0 — None",
-                            1: "1 — Primary Education",
-                            2: "2 — Grades 5–9",
-                            3: "3 — Secondary Education",
-                            4: "4 — Higher Education"
-                        }[value],
-                        help=help_text,
-                        key=f"input_{feature}"
-                    )
-
-                elif feature in [
-                    "traveltime", "studytime", "famrel",
-                    "freetime", "goout", "health"
-                ]:
-                    input_data[feature] = st.selectbox(
-                        label,
-                        options=[1, 2, 3, 4, 5]
-                        if feature in ["famrel", "freetime",
-                                       "goout", "health"]
-                        else [1, 2, 3, 4],
-                        help=help_text,
-                        key=f"input_{feature}"
-                    )
-
-                elif feature == "failures":
-                    input_data[feature] = st.selectbox(
-                        label,
-                        options=[0, 1, 2, 3],
-                        help=help_text,
-                        key=f"input_{feature}"
-                    )
-
-                elif feature == "age":
-                    input_data[feature] = st.number_input(
-                        label,
-                        min_value=15,
-                        max_value=22,
-                        value=17,
-                        step=1,
-                        help=help_text,
-                        key=f"input_{feature}"
-                    )
-
-                elif feature == "absences":
-                    input_data[feature] = st.number_input(
-                        label,
-                        min_value=0,
-                        max_value=100,
-                        value=0,
-                        step=1,
-                        help=help_text,
-                        key=f"input_{feature}"
+                        key=f"num_{feature}"
                     )
 
                 else:
+                    step = 1.0 if info["integer"] else 0.1
+
                     input_data[feature] = st.number_input(
                         label,
-                        value=0,
+                        min_value=minimum,
+                        max_value=maximum,
+                        value=default,
+                        step=step,
                         help=help_text,
-                        key=f"input_{feature}"
+                        key=f"num_{feature}"
                     )
 
     submitted = st.form_submit_button(
         "Predict Final Grade",
-        use_container_width=True
+        type="primary"
     )
 
-# --------------------------------------------------
-# Prediction
-# --------------------------------------------------
+
 if submitted:
     try:
-        # Preserve the exact feature order and original names
+        # Preserve the exact feature names and order expected by the model.
+        missing_features = [
+            col for col in feature_columns
+            if col not in input_data
+        ]
+
+        if missing_features:
+            st.error(
+                "Some model inputs are missing: "
+                + ", ".join(missing_features)
+                + ". Please check the saved model's feature configuration."
+            )
+            st.stop()
+
+        row = {
+            col: input_data[col]
+            for col in feature_columns
+        }
+
         input_df = pd.DataFrame(
-            [[input_data[col] for col in feature_columns]],
+            [row],
             columns=feature_columns
         )
 
-        prediction = float(model.predict(input_df)[0])
-
-        st.subheader("Prediction Result")
-        st.metric(
-            label="Predicted Final Grade (G3)",
-            value=f"{prediction:.2f} / 20"
+        prediction = float(
+            bundle["model"].predict(input_df)[0]
         )
 
-        if prediction >= 16:
-            st.success("Predicted performance: Very Good")
-        elif prediction >= 14:
-            st.success("Predicted performance: Good")
-        elif prediction >= 10:
-            st.info("Predicted performance: Satisfactory")
+        # Keep the displayed result within the dataset target range.
+        low = bundle.get("target_min", 0.0)
+        high = bundle.get("target_max", 20.0)
+
+        prediction_display = min(
+            max(prediction, low),
+            high
+        )
+
+        st.subheader("Prediction")
+        st.metric(
+            "Estimated Final Grade (G3)",
+            f"{prediction_display:.2f} / 20"
+        )
+
+        if prediction_display >= 16:
+            st.success("Estimated category: High")
+        elif prediction_display >= 10:
+            st.info("Estimated category: Moderate")
         else:
-            st.warning(
-                "Predicted performance: Needs Improvement"
-            )
+            st.warning("Estimated category: Low")
 
         st.caption(
-            "This is an estimate from a machine-learning model, "
-            "not a guaranteed grade or a formal student assessment."
+            "This is an estimate generated by a machine learning model, "
+            "not a guaranteed result or a formal assessment of a student."
         )
 
-    except Exception as e:
-        st.error(f"Prediction failed: {e}")
-        st.info(
-            "Check that the saved model expects the same feature "
-            "names and data types as the input form."
-        )
+    except Exception as exc:
+        st.error(f"Prediction failed: {exc}")
